@@ -1,4 +1,4 @@
-# 🎬 **Movie Recommender System** with Apache Spark 🚀
+## 🎬 **Movie Recommender System** with Apache Spark 🚀
 
 Welcome to the **Movie Recommendation System** built with **Apache Spark**! This powerful system utilizes the **Alternating Least Squares (ALS)** algorithm to recommend movies to users based on their preferences and ratings.
 
