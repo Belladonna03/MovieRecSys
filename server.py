@@ -15,7 +15,7 @@ def load_model():
     model = pickle.load(open("movie_recommender_model.pkl", "rb"))  # Загрузка модели
     return model
 
-# Главная страница (опционально)
+# Главная страница
 @app.route('/')
 def home():
     return "Welcome to the Movie Recommender Service!"
@@ -26,7 +26,7 @@ def recommend():
     genre = request.args.get('genre')
     actor = request.args.get('actor')
 
-    # Получение рекомендаций через вашу модель
+    # Получение рекомендаций через модель
     model = load_model()
     recommendations = model.get_top_recommendations(genre, actor)
 
