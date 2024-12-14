@@ -12,8 +12,13 @@ logger = logging.getLogger(__name__)
 
 # Загрузка модели и данных
 def load_model():
-    model = pickle.load(open("movie_recommender_model.pkl", "rb"))  # Загрузка модели
-    return model
+    try:
+        # Загрузка обученной модели (можно использовать pickle или иной способ сохранения)
+        model = pickle.load(open("movie_recommender_model.pkl", "rb"))
+        return model
+    except Exception as e:
+        logger.error(f"Error loading model: {e}")
+        return None
 
 # Главная страница
 @app.route('/')
@@ -23,23 +28,32 @@ def home():
 # API для получения рекомендаций
 @app.route('/recommend', methods=['GET'])
 def recommend():
-    genre = request.args.get('genre')
-    actor = request.args.get('actor')
+    try:
+        genre = request.args.get('genre')
+        actor = request.args.get('actor')
 
-    # Получение рекомендаций через модель
-    model = load_model()
-    recommendations = model.get_top_recommendations(genre, actor)
+        if not genre or not actor:
+            return jsonify({"error": "Both genre and actor parameters are required"}), 400
 
-    # Форматирование рекомендаций для ответа
-    recommendations_data = [{"movie": rec[0], "rating": rec[1]} for rec in recommendations]
-    
-    return jsonify(recommendations_data)
+        # Получаем модель
+        model = load_model()
+        if not model:
+            return jsonify({"error": "Model could not be loaded"}), 500
 
-# Функция для получения рекомендаций на основе жанра и актера
-def get_recommendations(genre, actor):
-    # Логика получения рекомендаций на основе выбранных данных
-    recommendations = []  # Тут будет ваш код для генерации рекомендаций с использованием модели
-    return recommendations
+        # Получение рекомендаций через модель
+        recommendations = model.get_top_recommendations(genre, actor)
+
+        if not recommendations:
+            return jsonify({"error": "No recommendations found for the given inputs"}), 404
+
+        # Форматирование рекомендаций для ответа
+        recommendations_data = [{"movie": rec[0], "rating": rec[1]} for rec in recommendations]
+
+        return jsonify(recommendations_data)
+
+    except Exception as e:
+        logger.error(f"Error in recommendation process: {e}")
+        return jsonify({"error": "An unexpected error occurred"}), 500
 
 # Запуск Flask-сервера
 if __name__ == "__main__":
