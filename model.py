@@ -7,12 +7,9 @@ from pyspark.mllib.recommendation import ALS, MatrixFactorizationModel
 from time import time
 from pyspark.rdd import RDD
 
-
-# Настроим логирование для удобства отслеживания прогресса
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Конфигурация для Spark
 class SparkConfig:
     def __init__(self, timeout: int = 1200):
         self.timeout = timeout
@@ -21,14 +18,10 @@ class SparkConfig:
         conf = SparkConf().set("spark.python.worker.timeout", str(self.timeout))
         return conf
 
-
-# Функция для получения абсолютного пути
 def get_abs_path(relative_path: str) -> str:
     base_dir = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_dir, relative_path)
 
-
-# Класс для работы с данными и рекомендациями
 class MovieRecommender:
     def __init__(self, sc: SparkContext, rank: int = 10, iterations: int = 10, lambda_: float = 0.1):
         self.sc = sc
@@ -36,7 +29,6 @@ class MovieRecommender:
         self.iterations = iterations
         self.lambda_ = lambda_
 
-    # Функция для загрузки данных
     def load_data(self, file_path: str, columns: List[int]) -> RDD[Tuple[Any]]:
         raw_data = self.sc.textFile(file_path)
         header = raw_data.take(1)[0]
@@ -45,7 +37,6 @@ class MovieRecommender:
                        .map(lambda tokens: tuple(tokens[i] for i in columns)) \
                        .cache()
 
-    # Функция для разделения данных на обучающую, валидационную и тестовую выборки
     def split_data(self, ratings_data: RDD[Tuple[Any]]) -> Tuple[RDD, RDD, RDD]:
         train_RDD, val_RDD, test_RDD = ratings_data.randomSplit([6, 2, 2], seed=42)
         train_RDD.cache()
@@ -53,7 +44,6 @@ class MovieRecommender:
         test_RDD.cache()
         return train_RDD, val_RDD, test_RDD
 
-    # Функция для обучения модели и выбора лучшего ранга
     def train_model(self, train_RDD: RDD, val_RDD: RDD) -> int:
         ranks = [4, 8, 12, 16, 20]
         min_error = float('inf')
@@ -71,7 +61,6 @@ class MovieRecommender:
 
         return best_rank
 
-    # Функция для предсказания и вычисления RMSE на тестовых данных
     def predict_and_evaluate(self, model: MatrixFactorizationModel, test_RDD: RDD) -> float:
         test_for_prediction = test_RDD.map(lambda x: (x[0], x[1]))
         predictions = model.predictAll(test_for_prediction).map(lambda r: ((r[0], r[1]), r[2]))
@@ -80,7 +69,6 @@ class MovieRecommender:
         logger.info(f'RMSE for testing data: {rmse}')
         return rmse
 
-    # Функция для получения топ-рекомендаций
     def get_top_recommendations(self, model: MatrixFactorizationModel, complete_movies_data: RDD[Tuple[Any]], movie_rating_counts_RDD: RDD[Tuple[int, int]], new_user_ratings_ids: List[int]) -> List[Tuple[str, float, int]]:
         new_user_ID = 0
         new_user_unrated_movies_RDD = complete_movies_data.filter(lambda x: x[0] not in new_user_ratings_ids).map(lambda x: (new_user_ID, x[0]))
@@ -93,49 +81,37 @@ class MovieRecommender:
         logger.info(f'TOP recommended movies (with more than 25 reviews):\n{top_movies}')
         return top_movies
 
-
-# Главная функция для выполнения всех шагов
 def main():
-    # Шаг 1: Настройка конфигурации Spark
     spark_config = SparkConfig(timeout=1200)
     sc = SparkContext(conf=spark_config.get_spark_conf())
-
-    # Шаг 2: Указываем пути к файлам
+    
     movies_file_path = get_abs_path('data/ml-latest-small/cleaned_movies_small_df.csv')
     ratings_file_path = get_abs_path('data/ml-latest-small/cleaned_ratings_small_df.csv')
     complete_ratings_file = get_abs_path('data/ml-latest/ratings.csv')
     complete_movies_file = get_abs_path('data/ml-latest/movies.csv')
 
-    # Шаг 3: Загружаем и обрабатываем данные о фильмах и рейтингах
     recommender = MovieRecommender(sc)
     movies_data = recommender.load_data(movies_file_path, [0, 1])
     ratings_data = recommender.load_data(ratings_file_path, [0, 1, 2])
     
     logger.info(f"Loaded {movies_data.count()} movies and {ratings_data.count()} ratings.")
 
-    # Шаг 4: Разделяем данные на обучающую, валидационную и тестовую выборки
     train_RDD, val_RDD, test_RDD = recommender.split_data(ratings_data)
 
-    # Шаг 5: Обучаем модель и выбираем лучший ранг
     best_rank = recommender.train_model(train_RDD, val_RDD)
     logger.info(f'The best model was trained with rank {best_rank}')
 
-    # Шаг 6: Обучаем модель с лучшим рангом и оцениваем её
     model = ALS.train(train_RDD, best_rank, seed=42, iterations=10, lambda_=0.1)
     rmse = recommender.predict_and_evaluate(model, test_RDD)
 
-    # Шаг 7: Загружаем полный набор данных о фильмах и рейтингах
     complete_movies_data = recommender.load_data(complete_movies_file, [0, 1, 2])
     complete_ratings_data = recommender.load_data(complete_ratings_file, [0, 1, 2])
 
-    # Шаг 8: Получаем топ-рекомендации для нового пользователя
     new_user_ratings_ids = [260, 1, 16, 25, 32, 335, 379, 296, 858, 50]  # IDs фильмов, оцененных новым пользователем
     movie_rating_counts_RDD = complete_ratings_data.map(lambda x: (x[1], x[2])).groupByKey().map(lambda x: (x[0], len(x[1])))
     top_movies = recommender.get_top_recommendations(model, complete_movies_data, movie_rating_counts_RDD, new_user_ratings_ids)
 
-    # Шаг 9: Завершаем работу
     logger.info("Recommendation process completed successfully.")
-
 
 if __name__ == "__main__":
     main()
