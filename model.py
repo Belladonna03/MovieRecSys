@@ -1,6 +1,7 @@
 import os
 import math
 import logging
+import numpy as np
 from typing import List, Tuple, Any
 from pyspark import SparkContext, SparkConf
 from pyspark.mllib.recommendation import ALS, MatrixFactorizationModel
